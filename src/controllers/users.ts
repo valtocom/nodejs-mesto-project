@@ -33,7 +33,9 @@ export const getUserById = (req: Request, res: Response) => {
 
 // POST /users - создаёт пользователя
 export const createUser = (req: Request, res: Response) => {
-  const { email, password, name, about, avatar } = req.body;
+  const {
+    email, password, name, about, avatar,
+  } = req.body;
 
   bcrypt.hash(password, 10)
     .then((hash) => User.create({
@@ -41,12 +43,11 @@ export const createUser = (req: Request, res: Response) => {
       password: hash,
       name,
       about,
-      avatar
+      avatar,
     }))
     .then((user) => {
-      // Используем деструктуризацию для удаления пароля
       const userObject = user.toObject();
-      const { password, ...userWithoutPassword } = userObject;
+      const { password: _, ...userWithoutPassword } = userObject; // Переименовали password в _
       res.status(201).send(userWithoutPassword);
     })
     .catch((err) => {
@@ -62,7 +63,7 @@ export const createUser = (req: Request, res: Response) => {
 
 // POST /signin - логин пользователя
 export const login = (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const { email, password: loginPassword } = req.body; // Переименовали password в loginPassword
 
   User.findOne({ email }).select('+password')
     .then((user) => {
@@ -70,7 +71,7 @@ export const login = (req: Request, res: Response) => {
         return res.status(401).send({ message: 'Неправильные почта или пароль' });
       }
 
-      return bcrypt.compare(password, user.password)
+      return bcrypt.compare(loginPassword, user.password) // Используем loginPassword
         .then((matched) => {
           if (!matched) {
             return res.status(401).send({ message: 'Неправильные почта или пароль' });
@@ -80,14 +81,14 @@ export const login = (req: Request, res: Response) => {
           const token = jwt.sign(
             { _id: user._id },
             JWT_SECRET,
-            { expiresIn: '7d' }
+            { expiresIn: '7d' },
           );
 
           // Отправляем токен в httpOnly куке
           res.cookie('jwt', token, {
             maxAge: 3600000 * 24 * 7,
             httpOnly: true,
-            sameSite: 'strict'
+            sameSite: 'strict',
           }).send({ message: 'Успешный вход' });
         });
     })
