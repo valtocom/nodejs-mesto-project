@@ -27,13 +27,18 @@ export const createCard = (req: any, res: Response) => {
 };
 
 // DELETE /cards/:cardId - удаляет карточку по идентификатору
-export const deleteCardById = (req: Request, res: Response) => {
-  Card.findByIdAndRemove(req.params.cardId)
+export const deleteCardById = (req: any, res: Response) => {
+  Card.findById(req.params.cardId)
     .then((card) => {
       if (!card) {
         return res.status(404).send({ message: 'Карточка не найдена' });
       }
-      return res.send({ message: 'Карточка удалена' });
+      if (card.owner.toString() !== req.user._id) {
+        return res.status(403).send({ message: 'Нельзя удалить чужую карточку' });
+      }
+
+      return Card.findByIdAndRemove(req.params.cardId)
+        .then(() => res.send({ message: 'Карточка удалена' }));
     })
     .catch((err) => {
       if (err.name === 'CastError') {
