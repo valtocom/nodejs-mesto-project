@@ -1,40 +1,48 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import Card from '../models/card';
+import { HttpStatus, ErrorMessages } from '../utils/constants';
+
+interface AuthRequest extends Request {
+  user?: {
+    _id: string;
+  }
+}
 
 // GET /cards - возвращает все карточки
-export const getCards = (req: Request, res: Response) => {
+export const getCards = (req: Request, res: Response, next: NextFunction) => {
   Card.find({})
     .populate(['owner', 'likes'])
     .then((cards) => res.send(cards))
-    .catch(() => {
-      res.status(500).send({ message: 'Ошибка на сервере' });
+    .catch((err) => {
+      next(err);
     });
 };
 
 // POST /cards - создаёт карточку
-export const createCard = (req: any, res: Response) => {
+export const createCard = (req: AuthRequest, res: Response, next: NextFunction) => {
   const { name, link } = req.body;
-  const owner = req.user._id;
+  const owner = req.user!._id;
 
   Card.create({ name, link, owner })
-    .then((card) => res.status(201).send(card))
+    .then((card) => res.status(HttpStatus.Created).send(card))
     .catch((err) => {
-      if (err.name === 'ValidationError') {
-        return res.status(400).send({ message: 'Переданы некорректные данные' });
-      }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
+      next(err);
     });
 };
 
 // DELETE /cards/:cardId - удаляет карточку по идентификатору
-export const deleteCardById = (req: any, res: Response) => {
+export const deleteCardById = (req: AuthRequest, res: Response, next: NextFunction) => {
   Card.findById(req.params.cardId)
     .then((card) => {
       if (!card) {
-        return res.status(404).send({ message: 'Карточка не найдена' });
+        const error: any = new Error(ErrorMessages.CARD_NOT_FOUND);
+        error.statusCode = HttpStatus.NotFound;
+        throw error;
       }
-      if (card.owner.toString() !== req.user._id) {
-        return res.status(403).send({ message: 'Нельзя удалить чужую карточку' });
+      if (card.owner.toString() !== req.user!._id) {
+        const error: any = new Error(ErrorMessages.FORBIDDEN_DELETE);
+        error.statusCode = HttpStatus.Forbidden;
+        throw error;
       }
 
       return Card.findByIdAndRemove(req.params.cardId)
@@ -42,52 +50,65 @@ export const deleteCardById = (req: any, res: Response) => {
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        return res.status(400).send({ message: 'Некорректный _id карточки' });
+        const error: any = new Error(ErrorMessages.INVALID_CARD_ID);
+        error.statusCode = HttpStatus.BadRequest;
+        next(error);
+      } else {
+        next(err);
       }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
     });
 };
 
 // PUT /cards/:cardId/likes - поставить лайк карточке
-export const likeCard = (req: any, res: Response) => {
+export const likeCard = (req: AuthRequest, res: Response, next: NextFunction) => {
   Card.findByIdAndUpdate(
     req.params.cardId,
-    { $addToSet: { likes: req.user._id } },
+    { $addToSet: { likes: req.user!._id } },
     { new: true },
   )
     .populate(['owner', 'likes'])
     .then((card) => {
       if (!card) {
-        return res.status(404).send({ message: 'Карточка не найдена' });
+        const error: any = new Error(ErrorMessages.CARD_NOT_FOUND);
+        error.statusCode = HttpStatus.NotFound;
+        throw error;
       }
       return res.send(card);
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        return res.status(400).send({ message: 'Некорректный _id карточки' });
+        const error: any = new Error(ErrorMessages.INVALID_CARD_ID);
+        error.statusCode = HttpStatus.BadRequest;
+        next(error);
+      } else {
+        next(err);
       }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
     });
 };
 
 // DELETE /cards/:cardId/likes - убрать лайк с карточки
-export const dislikeCard = (req: any, res: Response) => {
+export const dislikeCard = (req: AuthRequest, res: Response, next: NextFunction) => {
   Card.findByIdAndUpdate(
     req.params.cardId,
-    { $pull: { likes: req.user._id } },
+    { $pull: { likes: req.user!._id } },
     { new: true },
   )
     .populate(['owner', 'likes'])
     .then((card) => {
       if (!card) {
-        return res.status(404).send({ message: 'Карточка не найдена' });
+        const error: any = new Error(ErrorMessages.CARD_NOT_FOUND);
+        error.statusCode = HttpStatus.NotFound;
+        throw error;
       }
       return res.send(card);
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        return res.status(400).send({ message: 'Некорректный _id карточки' });
+        const error: any = new Error(ErrorMessages.INVALID_CARD_ID);
+        error.statusCode = HttpStatus.BadRequest;
+        next(error);
+      } else {
+        next(err);
       }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
     });
 };

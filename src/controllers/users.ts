@@ -1,38 +1,51 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/user';
+import { HttpStatus, ErrorMessages } from '../utils/constants';
 
 const { JWT_SECRET = 'dev-secret' } = process.env;
 
+// Создаём интерфейс для авторизованного запроса
+interface AuthRequest extends Request {
+  user?: {
+    _id: string;
+  }
+}
+
 // GET /users - возвращает всех пользователей
-export const getUsers = (req: Request, res: Response) => {
+export const getUsers = (req: Request, res: Response, next: NextFunction) => {
   User.find({})
     .then((users) => res.send(users))
-    .catch(() => {
-      res.status(500).send({ message: 'Ошибка на сервере' });
+    .catch((err) => {
+      next(err);
     });
 };
 
 // GET /users/:userId - возвращает пользователя по _id
-export const getUserById = (req: Request, res: Response) => {
+export const getUserById = (req: Request, res: Response, next: NextFunction) => {
   User.findById(req.params.userId)
     .then((user) => {
       if (!user) {
-        return res.status(404).send({ message: 'Пользователь не найден' });
+        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
+        error.statusCode = HttpStatus.NotFound;
+        throw error;
       }
       return res.send(user);
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        return res.status(400).send({ message: 'Некорректный _id пользователя' });
+        const error: any = new Error(ErrorMessages.INVALID_USER_ID);
+        error.statusCode = HttpStatus.BadRequest;
+        next(error);
+      } else {
+        next(err);
       }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
     });
 };
 
 // POST /users - создаёт пользователя
-export const createUser = (req: Request, res: Response) => {
+export const createUser = (req: Request, res: Response, next: NextFunction) => {
   const {
     email, password, name, about, avatar,
   } = req.body;
@@ -48,33 +61,41 @@ export const createUser = (req: Request, res: Response) => {
     .then((user) => {
       const userObject = user.toObject();
       const { password: _, ...userWithoutPassword } = userObject; // Переименовали password в _
-      res.status(201).send(userWithoutPassword);
+      res.status(HttpStatus.Created).send(userWithoutPassword);
     })
     .catch((err) => {
       if (err.code === 11000) {
-        return res.status(409).send({ message: 'Пользователь с таким email уже существует' });
+        const error: any = new Error(ErrorMessages.EMAIL_EXISTS);
+        error.statusCode = HttpStatus.Conflict;
+        next(error);
       }
       if (err.name === 'ValidationError') {
-        return res.status(400).send({ message: 'Переданы некорректные данные' });
+        const error: any = new Error(ErrorMessages.INVALID_DATA);
+        error.statusCode = HttpStatus.BadRequest;
+        next(error);
       }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
+      next(err);
     });
 };
 
 // POST /signin - логин пользователя
-export const login = (req: Request, res: Response) => {
+export const login = (req: Request, res: Response, next: NextFunction) => {
   const { email, password: loginPassword } = req.body; // Переименовали password в loginPassword
 
   User.findOne({ email }).select('+password')
     .then((user) => {
       if (!user) {
-        return res.status(401).send({ message: 'Неправильные почта или пароль' });
+        const error: any = new Error(ErrorMessages.INVALID_CREDENTIALS);
+        error.statusCode = HttpStatus.Unauthorized;
+        throw error;
       }
 
       return bcrypt.compare(loginPassword, user.password) // Используем loginPassword
         .then((matched) => {
           if (!matched) {
-            return res.status(401).send({ message: 'Неправильные почта или пароль' });
+            const error: any = new Error(ErrorMessages.INVALID_CREDENTIALS);
+            error.statusCode = HttpStatus.Unauthorized;
+            throw error;
           }
 
           // Создаем JWT токен
@@ -92,67 +113,79 @@ export const login = (req: Request, res: Response) => {
           }).send({ message: 'Успешный вход' });
         });
     })
-    .catch(() => {
-      res.status(500).send({ message: 'Ошибка на сервере' });
+    .catch((err) => {
+      next(err);
     });
 };
 
 // GET /users/me - возвращает информацию о текущем пользователе
-export const getCurrentUser = (req: any, res: Response) => {
-  User.findById(req.user._id)
+export const getCurrentUser = (req: AuthRequest, res: Response, next: NextFunction) => {
+  User.findById(req.user!._id)
     .then((user) => {
       if (!user) {
-        return res.status(404).send({ message: 'Пользователь не найден' });
+        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
+        error.statusCode = HttpStatus.NotFound;
+        throw error;
       }
       return res.send(user);
     })
-    .catch(() => {
-      res.status(500).send({ message: 'Ошибка на сервере' });
+    .catch((err) => {
+      next(err);
     });
 };
 
 // PATCH /users/me - обновляет профиль
-export const updateProfile = (req: any, res: Response) => {
+export const updateProfile = (req: AuthRequest, res: Response, next: NextFunction) => {
   const { name, about } = req.body;
 
   User.findByIdAndUpdate(
-    req.user._id,
+    req.user!._id,
     { name, about },
     { new: true, runValidators: true },
   )
     .then((user) => {
       if (!user) {
-        return res.status(404).send({ message: 'Пользователь не найден' });
+        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
+        error.statusCode = HttpStatus.NotFound;
+        throw error;
       }
       return res.send(user);
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        return res.status(400).send({ message: 'Переданы некорректные данные' });
+        const error: any = new Error(ErrorMessages.INVALID_DATA);
+        error.statusCode = HttpStatus.BadRequest;
+        next(error);
+      } else {
+        next(err);
       }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
     });
 };
 
 // PATCH /users/me/avatar - обновляет аватар
-export const updateAvatar = (req: any, res: Response) => {
+export const updateAvatar = (req: AuthRequest, res: Response, next: NextFunction) => {
   const { avatar } = req.body;
 
   User.findByIdAndUpdate(
-    req.user._id,
+    req.user!._id,
     { avatar },
     { new: true, runValidators: true },
   )
     .then((user) => {
       if (!user) {
-        return res.status(404).send({ message: 'Пользователь не найден' });
+        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
+        error.statusCode = HttpStatus.NotFound;
+        throw error;
       }
       return res.send(user);
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        return res.status(400).send({ message: 'Переданы некорректные данные' });
+        const error: any = new Error(ErrorMessages.INVALID_DATA);
+        error.statusCode = HttpStatus.BadRequest;
+        next(error);
+      } else {
+        next(err);
       }
-      return res.status(500).send({ message: 'Ошибка на сервере' });
     });
 };
