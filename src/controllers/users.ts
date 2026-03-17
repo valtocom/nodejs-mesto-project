@@ -3,6 +3,12 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/user';
 import { HttpStatus, ErrorMessages } from '../utils/constants';
+import {
+  NotFoundError,
+  BadRequestError,
+  UnauthorizedError,
+  ConflictError,
+} from '../utils/errors';
 
 const { JWT_SECRET = 'dev-secret' } = process.env;
 
@@ -27,17 +33,13 @@ export const getUserById = (req: Request, res: Response, next: NextFunction) => 
   User.findById(req.params.userId)
     .then((user) => {
       if (!user) {
-        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
-        error.statusCode = HttpStatus.NotFound;
-        throw error;
+        throw new NotFoundError(ErrorMessages.USER_NOT_FOUND);
       }
       return res.send(user);
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        const error: any = new Error(ErrorMessages.INVALID_USER_ID);
-        error.statusCode = HttpStatus.BadRequest;
-        next(error);
+        next(new BadRequestError(ErrorMessages.INVALID_USER_ID));
       } else {
         next(err);
       }
@@ -60,19 +62,15 @@ export const createUser = (req: Request, res: Response, next: NextFunction) => {
     }))
     .then((user) => {
       const userObject = user.toObject();
-      const { password: _, ...userWithoutPassword } = userObject; // Переименовали password в _
+      const { password: _, ...userWithoutPassword } = userObject;
       res.status(HttpStatus.Created).send(userWithoutPassword);
     })
     .catch((err) => {
       if (err.code === 11000) {
-        const error: any = new Error(ErrorMessages.EMAIL_EXISTS);
-        error.statusCode = HttpStatus.Conflict;
-        next(error);
+        next(new ConflictError(ErrorMessages.EMAIL_EXISTS));
       }
       if (err.name === 'ValidationError') {
-        const error: any = new Error(ErrorMessages.INVALID_DATA);
-        error.statusCode = HttpStatus.BadRequest;
-        next(error);
+        next(new BadRequestError(ErrorMessages.INVALID_DATA));
       }
       next(err);
     });
@@ -80,22 +78,18 @@ export const createUser = (req: Request, res: Response, next: NextFunction) => {
 
 // POST /signin - логин пользователя
 export const login = (req: Request, res: Response, next: NextFunction) => {
-  const { email, password: loginPassword } = req.body; // Переименовали password в loginPassword
+  const { email, password: loginPassword } = req.body;
 
   User.findOne({ email }).select('+password')
     .then((user) => {
       if (!user) {
-        const error: any = new Error(ErrorMessages.INVALID_CREDENTIALS);
-        error.statusCode = HttpStatus.Unauthorized;
-        throw error;
+        throw new UnauthorizedError(ErrorMessages.INVALID_CREDENTIALS);
       }
 
-      return bcrypt.compare(loginPassword, user.password) // Используем loginPassword
+      return bcrypt.compare(loginPassword, user.password)
         .then((matched) => {
           if (!matched) {
-            const error: any = new Error(ErrorMessages.INVALID_CREDENTIALS);
-            error.statusCode = HttpStatus.Unauthorized;
-            throw error;
+            throw new UnauthorizedError(ErrorMessages.INVALID_CREDENTIALS);
           }
 
           // Создаем JWT токен
@@ -123,9 +117,7 @@ export const getCurrentUser = (req: AuthRequest, res: Response, next: NextFuncti
   User.findById(req.user!._id)
     .then((user) => {
       if (!user) {
-        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
-        error.statusCode = HttpStatus.NotFound;
-        throw error;
+        throw new NotFoundError(ErrorMessages.USER_NOT_FOUND);
       }
       return res.send(user);
     })
@@ -145,17 +137,13 @@ export const updateProfile = (req: AuthRequest, res: Response, next: NextFunctio
   )
     .then((user) => {
       if (!user) {
-        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
-        error.statusCode = HttpStatus.NotFound;
-        throw error;
+        throw new NotFoundError(ErrorMessages.USER_NOT_FOUND);
       }
       return res.send(user);
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        const error: any = new Error(ErrorMessages.INVALID_DATA);
-        error.statusCode = HttpStatus.BadRequest;
-        next(error);
+        next(new BadRequestError(ErrorMessages.INVALID_DATA));
       } else {
         next(err);
       }
@@ -173,17 +161,13 @@ export const updateAvatar = (req: AuthRequest, res: Response, next: NextFunction
   )
     .then((user) => {
       if (!user) {
-        const error: any = new Error(ErrorMessages.USER_NOT_FOUND);
-        error.statusCode = HttpStatus.NotFound;
-        throw error;
+        throw new NotFoundError(ErrorMessages.USER_NOT_FOUND);
       }
       return res.send(user);
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        const error: any = new Error(ErrorMessages.INVALID_DATA);
-        error.statusCode = HttpStatus.BadRequest;
-        next(error);
+        next(new BadRequestError(ErrorMessages.INVALID_DATA));
       } else {
         next(err);
       }

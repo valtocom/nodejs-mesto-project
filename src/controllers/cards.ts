@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import Card from '../models/card';
 import { HttpStatus, ErrorMessages } from '../utils/constants';
+import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors';
 
 interface AuthRequest extends Request {
   user?: {
@@ -35,14 +36,10 @@ export const deleteCardById = (req: AuthRequest, res: Response, next: NextFuncti
   Card.findById(req.params.cardId)
     .then((card) => {
       if (!card) {
-        const error: any = new Error(ErrorMessages.CARD_NOT_FOUND);
-        error.statusCode = HttpStatus.NotFound;
-        throw error;
+        throw new NotFoundError(ErrorMessages.CARD_NOT_FOUND);
       }
       if (card.owner.toString() !== req.user!._id) {
-        const error: any = new Error(ErrorMessages.FORBIDDEN_DELETE);
-        error.statusCode = HttpStatus.Forbidden;
-        throw error;
+        throw new ForbiddenError(ErrorMessages.FORBIDDEN_DELETE);
       }
 
       return Card.findByIdAndRemove(req.params.cardId)
@@ -50,9 +47,7 @@ export const deleteCardById = (req: AuthRequest, res: Response, next: NextFuncti
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        const error: any = new Error(ErrorMessages.INVALID_CARD_ID);
-        error.statusCode = HttpStatus.BadRequest;
-        next(error);
+        next(new BadRequestError(ErrorMessages.INVALID_CARD_ID));
       } else {
         next(err);
       }
@@ -69,17 +64,13 @@ export const likeCard = (req: AuthRequest, res: Response, next: NextFunction) =>
     .populate(['owner', 'likes'])
     .then((card) => {
       if (!card) {
-        const error: any = new Error(ErrorMessages.CARD_NOT_FOUND);
-        error.statusCode = HttpStatus.NotFound;
-        throw error;
+        throw new NotFoundError(ErrorMessages.CARD_NOT_FOUND);
       }
       return res.send(card);
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        const error: any = new Error(ErrorMessages.INVALID_CARD_ID);
-        error.statusCode = HttpStatus.BadRequest;
-        next(error);
+        next(new BadRequestError(ErrorMessages.INVALID_CARD_ID));
       } else {
         next(err);
       }
@@ -96,17 +87,13 @@ export const dislikeCard = (req: AuthRequest, res: Response, next: NextFunction)
     .populate(['owner', 'likes'])
     .then((card) => {
       if (!card) {
-        const error: any = new Error(ErrorMessages.CARD_NOT_FOUND);
-        error.statusCode = HttpStatus.NotFound;
-        throw error;
+        throw new NotFoundError(ErrorMessages.CARD_NOT_FOUND);
       }
       return res.send(card);
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        const error: any = new Error(ErrorMessages.INVALID_CARD_ID);
-        error.statusCode = HttpStatus.BadRequest;
-        next(error);
+        next(new BadRequestError(ErrorMessages.INVALID_CARD_ID));
       } else {
         next(err);
       }
