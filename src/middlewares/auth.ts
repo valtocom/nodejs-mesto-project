@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import { UnauthorizedError } from '../utils/errors';
+import { ErrorMessages } from '../utils/constants';
 
 const { JWT_SECRET = 'dev-secret' } = process.env;
 
@@ -11,7 +13,7 @@ export default (req: CustomRequest, res: Response, next: NextFunction) => {
   const token = req.cookies.jwt;
 
   if (!token) {
-    return res.status(401).send({ message: 'Необходима авторизация' });
+    return next(new UnauthorizedError(ErrorMessages.AUTH_REQUIRED));
   }
 
   try {
@@ -19,6 +21,6 @@ export default (req: CustomRequest, res: Response, next: NextFunction) => {
     req.user = payload;
     next();
   } catch (err) {
-    return res.status(401).send({ message: 'Необходима авторизация' });
+    return next(new UnauthorizedError(ErrorMessages.AUTH_REQUIRED));
   }
 };
